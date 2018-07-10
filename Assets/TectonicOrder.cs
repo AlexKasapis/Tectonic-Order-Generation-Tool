@@ -4,14 +4,16 @@ using UnityEngine;
 
 public class TectonicOrder : MonoBehaviour
 {    
-    Hextile[,] hextiles;
+    Hextile[,] hextiles = new Hextile[0, 0];
     Plate[] plates;
 
     // Generation options - Hidden from the player
-    public int initial_plates = 10; // Supports up to 20 plates
-    public float plate_min_center_height = 76;
-    public float plate_max_center_height = 125;
-    public float plate_height_deviation = 10; // If a plate has 100 center height, its tiles can take values from 90 to 110
+    public int initial_plates = 20; // Supports up to 20 plates
+    public int height_emerging_centers = 20;
+
+    // Steps counter and maximum steps
+    public int curr_step = 0;
+    public int max_steps = 30;
 
     // On-Screen information
     public static string view_mode = "plates"; // plates, geography, height
@@ -25,12 +27,21 @@ public class TectonicOrder : MonoBehaviour
 
     private void Start()
     {
+        // Initialize the info labels
+        GameObject.Find("StepsLabel").GetComponent<TMPro.TextMeshProUGUI>().text = "Steps: " + curr_step + " / " + max_steps;
+
+        // Make buttons not clickable
+        GameObject.Find("Step1Button").GetComponent<UnityEngine.UI.Button>().interactable = false;
+        GameObject.Find("FinishGenButton").GetComponent<UnityEngine.UI.Button>().interactable = false;
+        GameObject.Find("PlatesModeButton").GetComponent<UnityEngine.UI.Button>().interactable = false;
+        GameObject.Find("GeographyModeButton").GetComponent<UnityEngine.UI.Button>().interactable = false;
+        GameObject.Find("HeightModeButton").GetComponent<UnityEngine.UI.Button>().interactable = false;
+        GameObject.Find("DirectionVectorsButton").GetComponent<UnityEngine.UI.Button>().interactable = false;
+
         // Plate materials
         plate_mats = new Material[initial_plates];
         for (int i = 0; i < initial_plates; i++)
-        {
             plate_mats[i] = Resources.Load("Materials/Plates/Plate" + i) as Material;
-        }
 
         // Geography materials
         geogr_mats = new Dictionary<Geography, Material>();
@@ -40,19 +51,22 @@ public class TectonicOrder : MonoBehaviour
         }
 
         // Height materials
-        height_mats = new Material[8]; // 1-25, 26-50, 51-75, 76-100, 101-125, 126-150, 151-175, 176-200 . 1 -> mariana trench, 200 -> everest
-        for (int i = 0; i < 8; i++)
+        height_mats = new Material[10];
+        for (int i = 0; i < 10; i++)
         {
             height_mats[i] = Resources.Load("Materials/Height/Height" + i) as Material;
         }
     }
     
-    public void InitializeMap(bool wipe_data)
+    public void InitializeMap()
     {
+        curr_step = 0;
+        GameObject.Find("StepsLabel").GetComponent<TMPro.TextMeshProUGUI>().text = "Steps: " + curr_step + " / " + max_steps;
+        GameObject.Find("GeographyModeButton").GetComponent<UnityEngine.UI.Button>().interactable = false;
+
         // Search hextile and vector objects and delete them
-        if (wipe_data)
-        {
-            showing_vectors = false;
+        showing_vectors = false;
+        if (hextiles.Length > 0)
             for (int row = 0; row < hextiles.GetLength(0); row++)
             {
                 for (int col = 0; col < hextiles.GetLength(1); col++)
@@ -61,7 +75,6 @@ public class TectonicOrder : MonoBehaviour
                     Destroy(hextiles[row, col].vector_object);
                 }
             }
-        }
 
         // Set the seed for the random number generation
         Random.InitState(Options.seed);
@@ -79,29 +92,8 @@ public class TectonicOrder : MonoBehaviour
          * belongs to another plate, ignore that hextile. In the end, all hextiles on the map will belong in a single
          * plate.
          */
-        int hextile_rows;
-        int hextile_cols;
-        switch (Options.map_size)
-        {
-            case 0:
-                hextile_rows = 50;
-                hextile_cols = 50;
-                break;
-            case 1:
-                hextile_rows = 150;
-                hextile_cols = 150;
-                break;
-            case 2:
-                hextile_rows = 250;
-                hextile_cols = 250;
-                break;
-            default:
-                Debug.Log("Map size has value " + Options.map_size + ". Reseting to 0 (50x50)");
-                Options.map_size = 0;
-                hextile_rows = 50;
-                hextile_cols = 50;
-                break;
-        }
+        int hextile_rows = Options.GetMapInfo().Item1;
+        int hextile_cols = Options.GetMapInfo().Item2;
         Tuple<int, int>[] emerging_centers = new Tuple<int, int>[initial_plates];
         for (int plate = 0; plate < initial_plates; plate++)
         {
@@ -144,13 +136,47 @@ public class TectonicOrder : MonoBehaviour
         }
 
         /*
-         * Plate heights. Each plate has a slightly different elevation compared to the others. Each plate has a
-         * medium center. All hextiles of this plate will have heights around this medium center. The deviation of
-         * heights is the same for all plates.
+         * Height Map. Elevate areas of the world without taking consideration of the plates. The elevation algorithm follows
+         * the same fashion of the plate distribution of the hextiles. This time, we have the height emerging centers and circles
+         * around them. These areas have an elevated height compared to the rest of the world.
          */
-        float[] center_heights = new float[initial_plates];
-        for (int plate = 0; plate < initial_plates; plate++)
-            center_heights[plate] = Random.Range(plate_min_center_height, plate_max_center_height);
+        int[,] heightmap = new int[hextile_rows, hextile_cols];
+        for (int row = 0; row < heightmap.GetLength(0); row++)
+            for (int col = 0; col < heightmap.GetLength(1); col++)
+                heightmap[row, col] = 0;
+
+        Tuple<int, int>[] height_centers = new Tuple<int, int>[height_emerging_centers];
+        for (int center = 0; center < height_emerging_centers; center++)
+        {
+            // Make sure that the emerging center location is unique
+            start:
+            Tuple<int, int> center_loc = new Tuple<int, int>(Random.Range(0, heightmap.GetLength(0) - 1), Random.Range(0, heightmap.GetLength(1) - 1));
+            for (int j = 0; j < center; j++)
+                if (center_loc == height_centers[j])
+                    goto start;
+            height_centers[center] = center_loc;
+        }
+        
+        diameter = 3;
+        while (diameter <= Mathf.Min(heightmap.GetLength(0), heightmap.GetLength(1)) / 2)
+        {
+            for (int center = 0; center < height_centers.Length; center++)
+            {
+                int center_row = height_centers[center].Item1;
+                int center_col = height_centers[center].Item2;
+
+                // Calculate the circle path. Note that rows are clamped while columns loop
+                int starting_row = Mathf.Clamp(center_row - (int)diameter / 2, 0, heightmap.GetLength(0) - 1);
+                int ending_row = Mathf.Clamp(center_row + (int)diameter / 2, 0, heightmap.GetLength(0) - 1);
+                int starting_col = center_col - (int)diameter / 2;
+                int ending_col = center_col + (int)diameter / 2;
+
+                for (int row = starting_row; row <= ending_row; row++)
+                    for (int col = starting_col; col <= ending_col; col++)
+                        heightmap[row, (col < 0) ? heightmap.GetLength(1) + col : (col >= heightmap.GetLength(1)) ? col - heightmap.GetLength(1) : col] += 1;
+            }
+            diameter += 2;
+        }
 
         /*
          * Hextiles array. This is the array that holds all information about the hextiles. Each cell is a Hextile object.
@@ -162,13 +188,23 @@ public class TectonicOrder : MonoBehaviour
             for (int col = 0; col < hextiles.GetLength(1); col++)
             {
                 Plate plate = plates[plate_tags[row, col]];
-                float height = Random.Range(center_heights[plate_tags[row, col]] - plate_height_deviation, center_heights[plate_tags[row, col]] + plate_height_deviation);
                 Hextile hextile = gameObject.AddComponent<Hextile>();
-                hextile.Initialize(row, col, plate, height);
+                hextile.Initialize(row, col, plate, heightmap[row, col]);
 
                 hextiles[row, col] = hextile;
             }
         }
+
+        // Make buttons clickable
+        GameObject.Find("Step1Button").GetComponent<UnityEngine.UI.Button>().interactable = true;
+        GameObject.Find("FinishGenButton").GetComponent<UnityEngine.UI.Button>().interactable = true;
+        GameObject.Find("PlatesModeButton").GetComponent<UnityEngine.UI.Button>().interactable = true;
+        GameObject.Find("HeightModeButton").GetComponent<UnityEngine.UI.Button>().interactable = true;
+        GameObject.Find("DirectionVectorsButton").GetComponent<UnityEngine.UI.Button>().interactable = true;
+
+        // Reset the view
+        view_mode = "plates";
+        ChangeViewMode(view_mode);
     }
 
     public void ChangeViewMode(string mode)
@@ -198,8 +234,7 @@ public class TectonicOrder : MonoBehaviour
          * consequently first move the hextile this hextile is going to interact with. It is convenient to use a recursive algorith for 
          * this approach. In order to avoid endless loops we must have a list of hextiles that we have already moved in this time frame.
          */
-
-        for (int curr_step = 0; curr_step < step_number; curr_step++)
+        for (int step = 0; step < step_number && curr_step < max_steps; step++)
         {
             // This array remembers the hextiles that have been already made their interaction
             // If a hextile has not been moved, the corresponding cell takes the value '0', contrary to the value '1' has it been moved
@@ -219,9 +254,24 @@ public class TectonicOrder : MonoBehaviour
             
             // At the end of each step rotate the direction vector of each plate by a random amount of degrees
             for (int i = 0; i < initial_plates; i++)
-            {
                 plates[i].ModifyDirVector(Random.Range(-120, 120), 1);
-            }
+
+            // Update the current step internally and on the UI
+            curr_step++;
+            GameObject.Find("StepsLabel").GetComponent<TMPro.TextMeshProUGUI>().text = "Steps: " + curr_step + " / " + max_steps;
+
+            // If we reached the maximum steps, disable the Do1StepButton
+            if (curr_step == max_steps)
+                GameObject.Find("Step1Button").GetComponent<UnityEngine.UI.Button>().interactable = false;
+
+        }
+
+        // If the FinishGen button was clicked, finish the thing
+        if (step_number == 30)
+        {
+            FinishGeneration();
+            GameObject.Find("FinishGenButton").GetComponent<UnityEngine.UI.Button>().interactable = false;
+            GameObject.Find("GeographyModeButton").GetComponent<UnityEngine.UI.Button>().interactable = true;
         }
 
         // At the end, update the textures and vectors of each hextileq
@@ -419,7 +469,7 @@ public class TectonicOrder : MonoBehaviour
                 {
                     // Update the changed destination hextile (plate_id, height, direction and exposed_asth)
                     hextiles[new_row, new_col].plate = hextiles[row, col].plate;
-                    hextiles[new_row, new_col].height = Mathf.Clamp(hextiles[new_row, new_col].height + 5, 1, 200);
+                    hextiles[new_row, new_col].height = Mathf.Clamp(hextiles[new_row, new_col].height + 5, 0, 99);
                     hextiles[new_row, new_col].exposed_asthenosphere = false;
 
                     // Update the old hextile
@@ -431,7 +481,7 @@ public class TectonicOrder : MonoBehaviour
                 else
                 {
                     // Update the changed destination hextile (plate_id, height, direction and exposed_asth)
-                    hextiles[new_row, new_col].height = Mathf.Clamp(hextiles[new_row, new_col].height + 5, 1, 200);
+                    hextiles[new_row, new_col].height = Mathf.Clamp(hextiles[new_row, new_col].height + 5, 0, 99);
 
                     // Update the old hextile
                     hextiles[row, col].exposed_asthenosphere = true;
@@ -558,5 +608,46 @@ public class TectonicOrder : MonoBehaviour
             }
         }
     }
+
+    private void FinishGeneration()
+    {
+        /*
+         * Part 1: Land, sea and elevation. Distinguish the sea level based on the water level option.
+         * Sort the Hextiles by height and keep only the (100-X)% as land. Then map the height to create realistic hills and mountains.
+         */
+
+        // Create a 1D list of all hextiles
+        List<Hextile> hextiles_list = new List<Hextile>();
+
+        // Populate the list with all the hextiles
+        for (int row = 0; row < hextiles.GetLength(0); row++)
+            for (int col = 0; col < hextiles.GetLength(1); col++)
+                hextiles_list.Add(hextiles[row, col]);
+        
+        // Sort the list based on the height of each hextile
+        hextiles_list.Sort(SortByHeight);
+
+        // Set the first (100-X)% of hextiles as land and the rest as sea
+        int land_count = (int)((float)((100 - Options.GetWaterInfo()) * (hextiles.GetLength(0) * hextiles.GetLength(1))) / 100);
+        int count = 0;
+        for (int tile = hextiles_list.Count - 1; tile >= 0; tile--)
+        {
+            int row = hextiles_list[tile].row;
+            int col = hextiles_list[tile].col;
+
+            if (count < land_count)
+                hextiles[row, col].geo_type = Geography.Grassland;
+            else
+                hextiles[row, col].geo_type = Geography.Ocean;
+
+            count++;
+        }
+    }
+
+    private int SortByHeight(Hextile h1, Hextile h2)
+    {
+        return h1.height.CompareTo(h2.height);
+    }
+
 
 }

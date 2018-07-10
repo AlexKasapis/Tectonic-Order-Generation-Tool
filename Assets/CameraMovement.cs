@@ -21,7 +21,7 @@ public class CameraMovement : MonoBehaviour {
     void Start () {
 
         // Setup the camera
-        transform.position = new Vector3(215, 400, 190);
+        transform.position = new Vector3(450, 700, 250);
         transform.eulerAngles = new Vector3(90, 0, 0);
 
         cursor_x = Input.mousePosition.x;

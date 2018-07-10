@@ -43,8 +43,8 @@ public class Hextile : MonoBehaviour
     };
 
     //Location on the map
-    int row;
-    int col;
+    public int row;
+    public int col;
 
     // World dimensions
     private float hextile_eff_width = 8.6f;
@@ -54,7 +54,7 @@ public class Hextile : MonoBehaviour
     // Morphological details of the hextile
     public Plate plate;
     public Geography geo_type;
-    public float height;
+    public int height;
 
     // Objects associated with this hextile
     public GameObject hextile_object;
@@ -63,7 +63,7 @@ public class Hextile : MonoBehaviour
     public bool exposed_asthenosphere = false;
 
 
-    public void Initialize(int row, int col, Plate plate, float height)
+    public void Initialize(int row, int col, Plate plate, int height)
     {
         this.row = row;
         this.col = col;
@@ -104,11 +104,10 @@ public class Hextile : MonoBehaviour
                 hextile_object.GetComponent<MeshRenderer>().material = TectonicOrder.plate_mats[plate.id];
                 break;
             case "geography":
-                Geography id = (height <= 100) ? Geography.Ocean : Geography.Grassland;
-                hextile_object.GetComponent<MeshRenderer>().material = TectonicOrder.geogr_mats[id];
+                hextile_object.GetComponent<MeshRenderer>().material = TectonicOrder.geogr_mats[geo_type];
                 break;
             case "height":
-                hextile_object.GetComponent<MeshRenderer>().material = TectonicOrder.height_mats[(int)(height - 1) / 25];
+                hextile_object.GetComponent<MeshRenderer>().material = TectonicOrder.height_mats[height / 10];
                 break;
             default:
                 Debug.Log("Invalid mode: " + TectonicOrder.view_mode + ". Defaulting to plates");

@@ -47,4 +47,25 @@ public class Options : MonoBehaviour
                 break;
         }
     }
+
+    public static Tuple<int, int> GetMapInfo()
+    {
+        Tuple<int, int> map_info;
+        switch (map_size)
+        {
+            case 0:
+                map_info = new Tuple<int, int>(70, 100);
+                break;
+            default:
+                Debug.Log("Invalid map_size value: " + map_size + ". Defaulting to 0 (50x50)");
+                map_info = new Tuple<int, int>(50, 50);
+                break;
+        }
+        return map_info;
+    }
+
+    public static int GetWaterInfo()
+    {
+        return water_level == 0 ? 60 : water_level == 1 ? 70 : 80;
+    }
 }
