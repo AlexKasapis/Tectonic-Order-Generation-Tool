@@ -8,12 +8,12 @@ public class TectonicOrder : MonoBehaviour
     Plate[] plates;
 
     // Generation options - Hidden from the player
-    public int initial_plates = 20; // Supports up to 20 plates
-    public int height_emerging_centers = 20;
+    public int initial_plates = 44;
+    public int height_emerging_centers = 25;
 
     // Steps counter and maximum steps
     public int curr_step = 0;
-    public int max_steps = 30;
+    public int max_steps = 15;
 
     // On-Screen information
     public static string view_mode = "plates"; // plates, geography, height
@@ -158,7 +158,7 @@ public class TectonicOrder : MonoBehaviour
         }
         
         diameter = 3;
-        while (diameter <= Mathf.Min(heightmap.GetLength(0), heightmap.GetLength(1)) / 2)
+        while (diameter <= Mathf.Min(heightmap.GetLength(0), heightmap.GetLength(1)) / 3)
         {
             for (int center = 0; center < height_centers.Length; center++)
             {
@@ -627,15 +627,26 @@ public class TectonicOrder : MonoBehaviour
         // Sort the list based on the height of each hextile
         hextiles_list.Sort(SortByHeight);
 
-        // Set the first (100-X)% of hextiles as land and the rest as sea
-        int land_count = (int)((float)((100 - Options.GetWaterInfo()) * (hextiles.GetLength(0) * hextiles.GetLength(1))) / 100);
+        // Land is separated in three major categories: low, medium and high elevation
+        float high_elevation = 5.0f / 100.0f;
+        float medium_elevation = 25.0f / 100.0f;
+        int land_hextiles = (int)((float)((100 - Options.GetWaterInfo()) * (hextiles.GetLength(0) * hextiles.GetLength(1))) / 100);
+        int high_hextiles = (int)(land_hextiles * high_elevation);
+        int medium_hextiles = (int)(land_hextiles * medium_elevation);
+        int low_hextiles = land_hextiles - high_hextiles - medium_hextiles;
+
+        // Apply geography
         int count = 0;
         for (int tile = hextiles_list.Count - 1; tile >= 0; tile--)
         {
             int row = hextiles_list[tile].row;
             int col = hextiles_list[tile].col;
 
-            if (count < land_count)
+            if (count < high_hextiles)
+                hextiles[row, col].geo_type = Geography.Mountains;
+            else if (count < high_hextiles + medium_hextiles)
+                hextiles[row, col].geo_type = Geography.Hills;
+            else if (count < high_hextiles + medium_hextiles + low_hextiles)
                 hextiles[row, col].geo_type = Geography.Grassland;
             else
                 hextiles[row, col].geo_type = Geography.Ocean;

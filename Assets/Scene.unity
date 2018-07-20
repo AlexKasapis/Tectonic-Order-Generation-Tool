@@ -7087,10 +7087,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b3e83c7c058cb55438453e0bf4557ba0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  initial_plates: 20
-  height_emerging_centers: 20
+  initial_plates: 44
+  height_emerging_centers: 25
   curr_step: 0
-  max_steps: 30
+  max_steps: 15
 --- !u!4 &1508964225
 Transform:
   m_ObjectHideFlags: 0
@@ -8525,7 +8525,7 @@ MonoBehaviour:
   m_isVolumetricText: 0
   m_spriteAnimator: {fileID: 0}
   m_isInputParsingRequired: 0
-  m_inputSource: 3
+  m_inputSource: 0
   m_hasFontAssetChanged: 0
   m_subTextObjects:
   - {fileID: 0}
