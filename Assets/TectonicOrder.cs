@@ -8,8 +8,8 @@ public class TectonicOrder : MonoBehaviour
     Plate[] plates;
 
     // Generation options - Hidden from the player
-    public int initial_plates = 44;
-    public int height_emerging_centers = 25;
+    private int initial_plates = 44;
+    private int elevation_centers = 25;
 
     // Steps counter and maximum steps
     public int curr_step = 0;
@@ -79,115 +79,26 @@ public class TectonicOrder : MonoBehaviour
         // Set the seed for the random number generation
         Random.InitState(Options.seed);
 
-        // Initialize the plates
+        // Initialize the Plate objects
         plates = new Plate[initial_plates];
         for (int i = 0; i < initial_plates; i++)
             plates[i] = new Plate(i);
 
-        /*
-         * Emerging centers. Each plate is formed from a center, which is picked randomly. In the beggining,
-         * each plate consists of only one hextile, its emerging center. From there, add all the adjacent hextiles
-         * to the plate the emerging center belongs to. Keep doing that for every plate, increasing the radius of
-         * the plates each loop by 1. If while adding new hextiles to the plate, there is a hextile that already
-         * belongs to another plate, ignore that hextile. In the end, all hextiles on the map will belong in a single
-         * plate.
-         */
+        // Assign plate IDs to each tile
         int hextile_rows = Options.GetMapInfo().Item1;
         int hextile_cols = Options.GetMapInfo().Item2;
-        Tuple<int, int>[] emerging_centers = new Tuple<int, int>[initial_plates];
-        for (int plate = 0; plate < initial_plates; plate++)
-        {
-            // Make sure that the emerging center location is unique for each plate
-            start:
-            Tuple<int, int> center_loc = new Tuple<int, int>(Random.Range(0, hextile_rows - 1), Random.Range(0, hextile_cols - 1));
-            for (int j = 0; j < plate; j++)
-                if (center_loc == emerging_centers[j])
-                    goto start;
-            emerging_centers[plate] = center_loc;
-        }
+        int[,] plate_ids = TectonicHelper.GenerateInitialPlates(hextile_cols, hextile_rows, initial_plates);
 
-        // Create an empty 2D array of ints, initialized with -1, meaning that the hextile has not been yet assigned to a plate
-        int[,] plate_tags = new int[hextile_rows, hextile_cols];
-        for (int row = 0; row < plate_tags.GetLength(0); row++)
-            for (int col = 0; col < plate_tags.GetLength(1); col++)
-                plate_tags[row, col] = -1;
+        // Calculate the initial height map for the world
+        int[,] heightmap = TectonicHelper.GenerateHeightMap(hextile_cols, hextile_rows, elevation_centers);
 
-        // Assign plates to hextiles, circling hextiles around their emerging centers
-        int diameter = 3;
-        while (diameter <= Mathf.Max(hextile_rows, hextile_cols))
-        {
-            for (int plate = 0; plate < initial_plates; plate++)
-            {
-                int center_row = emerging_centers[plate].Item1;
-                int center_col = emerging_centers[plate].Item2;
-
-                // Calculate the circle path. Note that rows are clamped while columns loop
-                int starting_row = Mathf.Clamp(center_row - (int)diameter / 2, 0, hextile_rows - 1);
-                int ending_row = Mathf.Clamp(center_row + (int)diameter / 2, 0, hextile_rows - 1);
-                int starting_col = center_col - (int)diameter / 2;
-                int ending_col = center_col + (int)diameter / 2;
-
-                for (int row = starting_row; row <= ending_row; row++)
-                    for (int col = starting_col; col <= ending_col; col++)
-                        if (plate_tags[row, (col < 0) ? hextile_cols + col : (col >= hextile_cols) ? col - hextile_cols : col] == -1)
-                            plate_tags[row, (col < 0) ? hextile_cols + col : (col >= hextile_cols) ? col - hextile_cols : col] = plate;
-            }
-            diameter += 2;
-        }
-
-        /*
-         * Height Map. Elevate areas of the world without taking consideration of the plates. The elevation algorithm follows
-         * the same fashion of the plate distribution of the hextiles. This time, we have the height emerging centers and circles
-         * around them. These areas have an elevated height compared to the rest of the world.
-         */
-        int[,] heightmap = new int[hextile_rows, hextile_cols];
-        for (int row = 0; row < heightmap.GetLength(0); row++)
-            for (int col = 0; col < heightmap.GetLength(1); col++)
-                heightmap[row, col] = 0;
-
-        Tuple<int, int>[] height_centers = new Tuple<int, int>[height_emerging_centers];
-        for (int center = 0; center < height_emerging_centers; center++)
-        {
-            // Make sure that the emerging center location is unique
-            start:
-            Tuple<int, int> center_loc = new Tuple<int, int>(Random.Range(0, heightmap.GetLength(0) - 1), Random.Range(0, heightmap.GetLength(1) - 1));
-            for (int j = 0; j < center; j++)
-                if (center_loc == height_centers[j])
-                    goto start;
-            height_centers[center] = center_loc;
-        }
-        
-        diameter = 3;
-        while (diameter <= Mathf.Min(heightmap.GetLength(0), heightmap.GetLength(1)) / 3)
-        {
-            for (int center = 0; center < height_centers.Length; center++)
-            {
-                int center_row = height_centers[center].Item1;
-                int center_col = height_centers[center].Item2;
-
-                // Calculate the circle path. Note that rows are clamped while columns loop
-                int starting_row = Mathf.Clamp(center_row - (int)diameter / 2, 0, heightmap.GetLength(0) - 1);
-                int ending_row = Mathf.Clamp(center_row + (int)diameter / 2, 0, heightmap.GetLength(0) - 1);
-                int starting_col = center_col - (int)diameter / 2;
-                int ending_col = center_col + (int)diameter / 2;
-
-                for (int row = starting_row; row <= ending_row; row++)
-                    for (int col = starting_col; col <= ending_col; col++)
-                        heightmap[row, (col < 0) ? heightmap.GetLength(1) + col : (col >= heightmap.GetLength(1)) ? col - heightmap.GetLength(1) : col] += 1;
-            }
-            diameter += 2;
-        }
-
-        /*
-         * Hextiles array. This is the array that holds all information about the hextiles. Each cell is a Hextile object.
-         * Instantiate and fill this array with information about each hextile.
-         */
+        // Setup the hextiles array which will hold all information about the world map (along with the plates array)
         hextiles = new Hextile[hextile_rows, hextile_cols];
         for (int row = 0; row < hextiles.GetLength(0); row++)
         {
             for (int col = 0; col < hextiles.GetLength(1); col++)
             {
-                Plate plate = plates[plate_tags[row, col]];
+                Plate plate = plates[plate_ids[row, col]];
                 Hextile hextile = gameObject.AddComponent<Hextile>();
                 hextile.Initialize(row, col, plate, heightmap[row, col]);
 
@@ -652,6 +563,98 @@ public class TectonicOrder : MonoBehaviour
                 hextiles[row, col].geo_type = Geography.Ocean;
 
             count++;
+        }
+
+        /*
+         * Part 2: Eliminate isolated hextiles
+         */
+        for (int row = 0; row < hextiles.GetLength(0); row++)
+        {
+            for (int col = 0; col < hextiles.GetLength(1); col++)
+            {
+                // If the tile is water it will have the value true
+                bool is_water = (hextiles[row, col].geo_type == Geography.Ocean || hextiles[row, col].geo_type == Geography.Inland_Sea) ? true : false;
+
+                // Gather the surrounding hextiles (in array: left, right, up_left, up_right, down_left, down_right)
+                Hextile[] surr_hextiles = new Hextile[6];
+
+                // Left
+                surr_hextiles[0] = (col == 0) ? hextiles[row, hextiles.GetLength(1) - 1] : hextiles[row, col - 1];
+
+                // Right
+                surr_hextiles[1] = (col == hextiles.GetLength(1) - 1) ? hextiles[row, 0] : hextiles[row, col + 1];
+
+                // Up side
+                if (row != hextiles.GetLength(0) - 1)
+                {
+                    if (row % 2 == 0)
+                    {
+                        // Up left
+                        surr_hextiles[2] = (col == 0) ? hextiles[row + 1, hextiles.GetLength(1) - 1] : hextiles[row + 1, col - 1];
+
+                        // Up right
+                        surr_hextiles[3] = hextiles[row + 1, col];
+                    }
+                    else
+                    {
+                        // Up left
+                        surr_hextiles[2] = hextiles[row + 1, col];
+
+                        // Up right
+                        surr_hextiles[3] = (col == hextiles.GetLength(1) - 1) ? hextiles[row + 1, 0] : hextiles[row + 1, col + 1];
+                    }
+                }
+
+                // Down side
+                if (row != 0)
+                {
+                    if (row % 2 == 0)
+                    {
+                        // Down left
+                        surr_hextiles[4] = (col == 0) ? hextiles[row - 1, hextiles.GetLength(1) - 1] : hextiles[row - 1, col - 1];
+
+                        // Down right
+                        surr_hextiles[5] = hextiles[row - 1, col];
+                    }
+                    else
+                    {
+                        // Down left
+                        surr_hextiles[4] = hextiles[row - 1, col];
+
+                        // Down right
+                        surr_hextiles[5] = (col == hextiles.GetLength(1) - 1) ? hextiles[row - 1, 0] : hextiles[row - 1, col + 1];
+                    }
+                }
+
+                // If this remains true after the inspection
+                bool is_isolated = true;
+
+                for (int index = 0; index < surr_hextiles.Length; index++)
+                {
+                    if (surr_hextiles[index] != null)
+                    {
+                        if (is_water && (surr_hextiles[index].geo_type == Geography.Ocean || surr_hextiles[index].geo_type == Geography.Inland_Sea))
+                            is_isolated = false;
+
+                        if (!is_water && (surr_hextiles[index].geo_type != Geography.Ocean && surr_hextiles[index].geo_type != Geography.Inland_Sea))
+                            is_isolated = false;
+                    }
+                }
+
+                // Is the tile is isolated, find one non null hextile and copy the height and geo_type to the isolated tile
+                if (is_isolated)
+                {
+                    for (int index = 0; index < surr_hextiles.Length; index++)
+                    {
+                        if (surr_hextiles[index] != null)
+                        {
+                            hextiles[row, col].geo_type = surr_hextiles[index].geo_type;
+                            hextiles[row, col].height = surr_hextiles[index].height;
+                            break;
+                        }
+                    }
+                }
+            }
         }
     }
 

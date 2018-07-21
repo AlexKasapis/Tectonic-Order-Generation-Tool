@@ -7087,7 +7087,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b3e83c7c058cb55438453e0bf4557ba0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  initial_plates: 44
+  initial_plates: 10
   height_emerging_centers: 25
   curr_step: 0
   max_steps: 15
