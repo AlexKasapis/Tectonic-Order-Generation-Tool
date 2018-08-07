@@ -56,6 +56,9 @@ public class TectonicOrder : MonoBehaviour
         {
             height_mats[i] = Resources.Load("Materials/Height/Height" + i) as Material;
         }
+
+        // Initialize the Hextile mesh data
+        Hextile.InitializeMeshes();
     }
     
     public void InitializeMap()
@@ -100,7 +103,7 @@ public class TectonicOrder : MonoBehaviour
             {
                 Plate plate = plates[plate_ids[row, col]];
                 Hextile hextile = gameObject.AddComponent<Hextile>();
-                hextile.Initialize(row, col, plate, heightmap[row, col]);
+                hextile.InitializeHextile(row, col, plate, heightmap[row, col]);
 
                 hextiles[row, col] = hextile;
             }

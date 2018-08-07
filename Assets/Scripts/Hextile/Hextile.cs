@@ -11,36 +11,10 @@ public enum Geography
 
 public class Hextile : MonoBehaviour
 {
-    // Mesh Information
-    Vector3[] local_vertices = new Vector3[]
-    {
-            new Vector3(4.3f, 0, 5),    // Center
-            new Vector3(4.3f, 0, 0),    // Bottom
-            new Vector3(0, 0, 2.5f),    // Left bottom
-            new Vector3(0, 0, 7.5f),    // Left top
-            new Vector3(4.3f, 0, 10),   // Top
-            new Vector3(8.6f, 0, 7.5f), // Right top
-            new Vector3(8.6f, 0, 2.5f)  // Right bottom
-    };
-    int[] local_triangles = new int[]
-    {
-            0, 1, 2,
-            0, 2, 3,
-            0, 3, 4,
-            0, 4, 5,
-            0, 5, 6,
-            0, 6, 1
-    };
-    Vector2[] local_uvs = new Vector2[]
-    {
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0),
-            new Vector2(0, 0.25f),
-            new Vector2(0, 0.75f),
-            new Vector2(0.5f, 1),
-            new Vector2(1, 0.75f),
-            new Vector2(1, 0.25f)
-    };
+    // Mesh Information. This should be dynamic but for now it is what it is.
+    public static Vector3[] local_vertices;
+    public static int[] local_triangles;
+    public static Vector2[] local_uvs;
 
     //Location on the map
     public int row;
@@ -62,8 +36,16 @@ public class Hextile : MonoBehaviour
 
     public bool exposed_asthenosphere = false;
 
+    public static void InitializeMeshes() {
 
-    public void Initialize(int row, int col, Plate plate, int height)
+        HexagonTriangulation.TriangulateHexagon();
+        local_vertices = HexagonTriangulation.GetVerticesArray();
+        local_triangles = HexagonTriangulation.GetTrianglesArray();
+        local_uvs = HexagonTriangulation.GetUVArray();
+        
+    }
+
+    public void InitializeHextile(int row, int col, Plate plate, int height)
     {
         this.row = row;
         this.col = col;
