@@ -4,7 +4,7 @@ using UnityEngine;
 
 public class TectonicOrder : MonoBehaviour
 {    
-    Hextile[,] hextiles = new Hextile[0, 0];
+    public static Hextile[,] hextiles = new Hextile[0, 0];
     Plate[] plates;
 
     // Generation options - Hidden from the player
@@ -21,7 +21,6 @@ public class TectonicOrder : MonoBehaviour
 
     // Materials
     public static Material[] plate_mats;
-    public static Dictionary<Geography, Material> geogr_mats;
     public static Material[] height_mats;
 
 
@@ -43,12 +42,8 @@ public class TectonicOrder : MonoBehaviour
         for (int i = 0; i < initial_plates; i++)
             plate_mats[i] = Resources.Load("Materials/Plates/Plate" + i) as Material;
 
-        // Geography materials
-        geogr_mats = new Dictionary<Geography, Material>();
-        for (int i = 0; i < Geography.GetNames(typeof(Geography)).Length; i++)
-        {
-            geogr_mats.Add((Geography)i, Resources.Load("Materials/Geography/" + ((Geography)i).ToString()) as Material);
-        }
+        // Load geography materials
+        GeoType.LoadMaterials();        
 
         // Height materials
         height_mats = new Material[10];
@@ -58,7 +53,7 @@ public class TectonicOrder : MonoBehaviour
         }
 
         // Initialize the Hextile mesh data
-        Hextile.InitializeMeshes();
+        HexagonTriangulation.TriangulateHexagon();
     }
     
     public void InitializeMap()
@@ -338,7 +333,7 @@ public class TectonicOrder : MonoBehaviour
         {
             // Update the changed destination hextile (plate_id, height, direction and exposed_asth)
             hextiles[new_row, new_col].plate = hextiles[row, col].plate;
-            hextiles[new_row, new_col].height = hextiles[row, col].height;
+            hextiles[new_row, new_col].height_01 = hextiles[row, col].height_01;
             hextiles[new_row, new_col].exposed_asthenosphere = false;
 
             // Update the old hextile
@@ -379,11 +374,11 @@ public class TectonicOrder : MonoBehaviour
                  * If the current hextile is higher than the destination, overlap it, increasing its height.
                  * If the destination hextile is higher, slide the current hextile under the destination, increasing the destination's height.
                  */
-                if (hextiles[row, col].height >= hextiles[new_row, new_col].height)
+                if (hextiles[row, col].height_01 >= hextiles[new_row, new_col].height_01)
                 {
                     // Update the changed destination hextile (plate_id, height, direction and exposed_asth)
                     hextiles[new_row, new_col].plate = hextiles[row, col].plate;
-                    hextiles[new_row, new_col].height = Mathf.Clamp(hextiles[new_row, new_col].height + 5, 0, 99);
+                    hextiles[new_row, new_col].height_01 = Mathf.Clamp(hextiles[new_row, new_col].height_01 + 5, 0, 99);
                     hextiles[new_row, new_col].exposed_asthenosphere = false;
 
                     // Update the old hextile
@@ -395,7 +390,7 @@ public class TectonicOrder : MonoBehaviour
                 else
                 {
                     // Update the changed destination hextile (plate_id, height, direction and exposed_asth)
-                    hextiles[new_row, new_col].height = Mathf.Clamp(hextiles[new_row, new_col].height + 5, 0, 99);
+                    hextiles[new_row, new_col].height_01 = Mathf.Clamp(hextiles[new_row, new_col].height_01 + 5, 0, 99);
 
                     // Update the old hextile
                     hextiles[row, col].exposed_asthenosphere = true;
@@ -557,13 +552,13 @@ public class TectonicOrder : MonoBehaviour
             int col = hextiles_list[tile].col;
 
             if (count < high_hextiles)
-                hextiles[row, col].geo_type = Geography.Mountains;
+                hextiles[row, col].geo_type = new GeoType(GeoElevation.Mountains, GeoProperty.Grassland);
             else if (count < high_hextiles + medium_hextiles)
-                hextiles[row, col].geo_type = Geography.Hills;
+                hextiles[row, col].geo_type = new GeoType(GeoElevation.Hills, GeoProperty.Grassland);
             else if (count < high_hextiles + medium_hextiles + low_hextiles)
-                hextiles[row, col].geo_type = Geography.Grassland;
+                hextiles[row, col].geo_type = new GeoType(GeoElevation.Level, GeoProperty.Grassland);
             else
-                hextiles[row, col].geo_type = Geography.Ocean;
+                hextiles[row, col].geo_type = new GeoType(GeoElevation.Water, GeoProperty.Ocean);
 
             count++;
         }
@@ -576,7 +571,7 @@ public class TectonicOrder : MonoBehaviour
             for (int col = 0; col < hextiles.GetLength(1); col++)
             {
                 // If the tile is water it will have the value true
-                bool is_water = (hextiles[row, col].geo_type == Geography.Ocean || hextiles[row, col].geo_type == Geography.Inland_Sea) ? true : false;
+                bool is_water = (hextiles[row, col].geo_type.geo_elevation == GeoElevation.Water) ? true : false;
 
                 // Gather the surrounding hextiles (in array: left, right, up_left, up_right, down_left, down_right)
                 Hextile[] surr_hextiles = new Hextile[6];
@@ -636,10 +631,10 @@ public class TectonicOrder : MonoBehaviour
                 {
                     if (surr_hextiles[index] != null)
                     {
-                        if (is_water && (surr_hextiles[index].geo_type == Geography.Ocean || surr_hextiles[index].geo_type == Geography.Inland_Sea))
+                        if (is_water && (surr_hextiles[index].geo_type.geo_elevation == GeoElevation.Water))
                             is_isolated = false;
 
-                        if (!is_water && (surr_hextiles[index].geo_type != Geography.Ocean && surr_hextiles[index].geo_type != Geography.Inland_Sea))
+                        if (!is_water && (surr_hextiles[index].geo_type.geo_elevation != GeoElevation.Water))
                             is_isolated = false;
                     }
                 }
@@ -652,19 +647,71 @@ public class TectonicOrder : MonoBehaviour
                         if (surr_hextiles[index] != null)
                         {
                             hextiles[row, col].geo_type = surr_hextiles[index].geo_type;
-                            hextiles[row, col].height = surr_hextiles[index].height;
+                            hextiles[row, col].height_01 = surr_hextiles[index].height_01;
                             break;
                         }
                     }
                 }
             }
         }
+
+        /*
+         * Part 3: Make Hextiles 3D
+         */
+        for (int row = 0; row < hextiles.GetLength(0); row++)
+        {
+            for (int col = 0; col < hextiles.GetLength(1); col++)
+            {
+                hextiles[row, col].CalculateFinalMesh();
+            }
+        }
     }
 
     private int SortByHeight(Hextile h1, Hextile h2)
     {
-        return h1.height.CompareTo(h2.height);
+        return h1.height_01.CompareTo(h2.height_01);
     }
 
-
+    public static Hextile GetRelativeHextile(int row, int col, string direction)
+    {
+        int new_row;
+        int new_col;
+        switch (direction)
+        {
+            case "right":
+                new_row = row;
+                new_col = (col == hextiles.GetLength(1) - 1) ? 0 : col + 1;
+                return hextiles[new_row, new_col];
+            case "right_up":
+                if (row == hextiles.GetLength(0) - 1)
+                    return null;
+                new_row = row + 1;
+                new_col = (row % 2 == 0) ? col : (col == hextiles.GetLength(1) - 1) ? 0 : col + 1;
+                return hextiles[new_row, new_col];
+            case "left_up":
+                if (row == hextiles.GetLength(0) - 1)
+                    return null;
+                new_row = row + 1;
+                new_col = (row % 2 == 0) ? (col == 0) ? hextiles.GetLength(1) - 1 : col - 1 : col;
+                return hextiles[new_row, new_col];
+            case "left":
+                new_row = row;
+                new_col = (col == 0) ? hextiles.GetLength(1) - 1 : col - 1;
+                return hextiles[new_row, new_col];
+            case "left_down":
+                if (row == 0)
+                    return null;
+                new_row = row - 1;
+                new_col = (row % 2 == 0) ? (col == 0) ? hextiles.GetLength(1) - 1 : col - 1 : col;
+                return hextiles[new_row, new_col];
+            case "right_down":
+                if (row == 0)
+                    return null;
+                new_row = row - 1;
+                new_col = (row % 2 == 0) ? col : (col == hextiles.GetLength(1) - 1) ? 0 : col + 1;
+                return hextiles[new_row, new_col];
+            default:
+                return null;
+        }
+    }
 }

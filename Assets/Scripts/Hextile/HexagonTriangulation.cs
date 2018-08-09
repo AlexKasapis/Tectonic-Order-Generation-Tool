@@ -7,7 +7,7 @@ using UnityEngine;
 /*
  * A Point object represents a point on the hexagon
  */
-struct Point
+public struct Point
 {
     // Unique identifier for the point
     public int point_id;
@@ -21,7 +21,10 @@ struct Point
     // A dictionary that contains points neighboring to this point in the format: {k: point_id, v: point_age}
     public Dictionary<int, int> neighbor_ids;
 
-    // The age of the point corresponds to the iteration of which it was created
+    // The two neighbors when this point was first created. Used for height calculation
+    public Tuple<int, int> initial_neighbors;
+
+    // T0he age of the point corresponds to the iteration of which it was created
     public int age;
 };
 
@@ -67,8 +70,20 @@ public static class HexagonTriangulation {
         new int[] { 2, 6, 0 }
     };
 
-    // A dictionary that contains all points of the hexagon
-    private static Dictionary<int, Point> points_dict = new Dictionary<int, Point>();
+    // A dictionary that contains all points of the hexagon <point_id, Point>
+    public static Dictionary<int, Point> points_dict = new Dictionary<int, Point>();
+
+    // A dictionary that organizes the points based on their age <age, <point_id>>
+    public static Dictionary<int, List<int>> age_dict = new Dictionary<int, List<int>>();
+
+    // Keeps track of the opposite vertices
+    private static Tuple<List<int>, List<int>>[] opposite_vertices =
+    {
+        new Tuple<List<int>, List<int>>(new List<int>(new int[] { 0, 1 }), new List<int>(new int[] { 5, 4 })),
+        new Tuple<List<int>, List<int>>(new List<int>(new int[] { 1, 3 }), new List<int>(new int[] { 6, 5 })),
+        new Tuple<List<int>, List<int>>(new List<int>(new int[] { 0, 6 }), new List<int>(new int[] { 3, 4 }))
+    };
+    
 
     // An array that contains all triangles in the hexagon (only the smallest ones, not the ones that are created by others)
     private static List<int[]> triangles = new List<int[]>();
@@ -78,7 +93,7 @@ public static class HexagonTriangulation {
     private static float max_y = 10.0f;
 
     // How many dividing iteration to have (resolution of the hexagon goes up, the more iterations we have)
-    private static int iterations = 4;
+    private static int iterations = 2;
 
 
     public static void TriangulateHexagon()
@@ -94,9 +109,14 @@ public static class HexagonTriangulation {
             // Create edges between the new points created
             new_points_dict = ConnectNewPoints(new_points_dict, it);
 
-            // Dump the new_points_dict to the points_dict
+            // Dump the new_points_dict to the points_dict and update the age_dict
+            List<int> age_points = new List<int>();
             foreach (KeyValuePair<int, Point> point_entry in new_points_dict)
+            {
                 points_dict[point_entry.Key] = point_entry.Value;
+                age_points.Add(point_entry.Value.point_id);
+            }
+            age_dict[it + 1] = age_points;
         }
     }
 
@@ -106,6 +126,9 @@ public static class HexagonTriangulation {
      */
     private static void Setup()
     {
+        // Initialize a list that contains all ids of point with age 0
+        List<int> age_points = new List<int>();
+
         // Create the initial Point objects
         for (int index = 0; index < initial_points_data.Length; index++)
         {
@@ -120,7 +143,13 @@ public static class HexagonTriangulation {
                 age = 0
             };
             points_dict[index] = point;
+
+            // Update the age_points list
+            age_points.Add(point.point_id);
         }
+
+        // Push the age_points list to the age_dict
+        age_dict[0] = age_points;
 
         // Update the Point objects with their neighbors
         for (int index = 0; index < initial_edges_data.Length; index++)
@@ -206,8 +235,25 @@ public static class HexagonTriangulation {
             uv_x = new_x / max_x,
             uv_y = new_y / max_y,
             neighbor_ids = neighbs,
+            initial_neighbors = new Tuple<int, int>(id_1, id_2),
             age = new_point_age
         };
+
+        // Update the opposite_vertices array
+        for (int i = 0; i < opposite_vertices.Length; i++)
+        {
+            List<int> edge_1 = opposite_vertices[i].Item1;
+            List<int> edge_2 = opposite_vertices[i].Item2;
+
+            // Check if the midpoint is on one of the two edges, meaning id_1 and id_2 are adjacent to one of the two lists
+            for (int j = 0; j < edge_1.Count - 1; j++)
+                if ((edge_1.ElementAt(j) == id_1 && edge_1.ElementAt(j + 1) == id_2) || (edge_1.ElementAt(j) == id_2 && edge_1.ElementAt(j + 1) == id_1))
+                    edge_1.Insert(j + 1, new_point_id);
+
+            for (int j = 0; j < edge_2.Count - 1; j++)
+                if ((edge_2.ElementAt(j) == id_1 && edge_2.ElementAt(j + 1) == id_2) || (edge_2.ElementAt(j) == id_2 && edge_2.ElementAt(j + 1) == id_1))
+                    edge_2.Insert(j + 1, new_point_id);
+        }
 
         return point;
     }
@@ -347,11 +393,6 @@ public static class HexagonTriangulation {
      */
     private static void UpdateTriangles(Dictionary<int, Point> new_points_dict, int id_1, int id_2, int id_3, int[] outer_points)
     {
-        //Debug.Log("Point 1 (" + id_1 + "): " + new_points_dict[id_1].mesh_x + " " + new_points_dict[id_1].mesh_y);
-        //Debug.Log("Point 2 (" + id_2 + "): " + new_points_dict[id_2].mesh_x + " " + new_points_dict[id_2].mesh_y);
-        //Debug.Log("Point 3 (" + id_3 + "): " + new_points_dict[id_3].mesh_x + " " + new_points_dict[id_3].mesh_y);
-        //Debug.Log("");
-
         // Find and remove the outer triangle from the triangles list
         foreach (int[] triangle in triangles)
         {
@@ -444,7 +485,7 @@ public static class HexagonTriangulation {
     {
         Vector3[] local_vertices = new Vector3[points_dict.Count];
         for (int i = 0; i < local_vertices.Length; i++)
-            local_vertices[i] = new Vector3(points_dict[i].mesh_x, 0.0f, points_dict[i].mesh_y);
+            local_vertices[i] = new Vector3(points_dict[i].mesh_x, -1.0f, points_dict[i].mesh_y);
         return local_vertices;
     }
 
@@ -470,4 +511,48 @@ public static class HexagonTriangulation {
         return local_uvs;
     }
 
+    public static int GetOppositePoint(int point_id)
+    {
+        for (int i = 0; i < opposite_vertices.Length; i++)
+        {
+            List<int> edge_1 = opposite_vertices[i].Item1;
+            List<int> edge_2 = opposite_vertices[i].Item2;
+
+            for (int j = 0; j < edge_1.Count; j++)
+            {
+                if (edge_1[j] == point_id)
+                    return edge_2[j];
+                else if (edge_2[j] == point_id)
+                    return edge_1[j];
+            }
+        }
+        return -1;
+    }
+
+    public static string GetEdgeCode(int point_id)
+    {
+        List<int> right_up_list = opposite_vertices[0].Item1;
+        List<int> right_list = opposite_vertices[1].Item1;
+        List<int> right_down_list = opposite_vertices[2].Item2;
+        List<int> left_down_list = opposite_vertices[0].Item2;
+        List<int> left_list = opposite_vertices[1].Item2;
+        List<int> left_up_list = opposite_vertices[2].Item1;
+
+        for (int i = 0; i < right_up_list.Count; i++)
+        {
+            if (right_up_list[i] == point_id)
+                return "right_up";
+            else if (right_list[i] == point_id)
+                return "right";
+            else if (right_down_list[i] == point_id)
+                return "right_down";
+            else if (left_down_list[i] == point_id)
+                return "left_down";
+            else if (left_list[i] == point_id)
+                return "left";
+            else if (left_up_list[i] == point_id)
+                return "left_up";
+        }
+        return "";
+    }
 }
