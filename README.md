@@ -16,8 +16,6 @@ FEATURES
 - Climate options (not functioning yet).
 - Resources options (not functioning yet).
 - Distribution options (not functioning yet).
-
-FEATURES
 - Ability to generate the map straight away, or view the steps one by one.
 - Plate/Geographical/Height map layers.
 - Basic 3D world morphology.
