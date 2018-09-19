@@ -3,556 +3,268 @@ using System.Linq;
 using System.Collections.Generic;
 using UnityEngine;
 
+public class HexagonTriangulation : MonoBehaviour {
 
-/*
- * A Point object represents a point on the hexagon
- */
-public struct Point
-{
-    // Unique identifier for the point
-    public int point_id;
+    // A Point represents a location on the hexagon
+    public struct Point {
+        public float[] location;  // The physical transform of this Point on the game map
+        public int age;  // In which iteration was this Point created
+        public List<Point> opp_correspondance;  // The opposite Point or Points of this point
+        public Point[] neighbors;  // The two Points this Point cut their edge in half
+        public string neighb_hextile_dir;  // The direction for the Hextile that this Point is neighboring to -- only for outer edge Points
 
-    // Physical location of the point and uv correspondence
-    public float mesh_x;
-    public float mesh_y;
-    public float uv_x;
-    public float uv_y;
-    
-    // A dictionary that contains points neighboring to this point in the format: {k: point_id, v: point_age}
-    public Dictionary<int, int> neighbor_ids;
-
-    // The two neighbors when this point was first created. Used for height calculation
-    public Tuple<int, int> initial_neighbors;
-
-    // T0he age of the point corresponds to the iteration of which it was created
-    public int age;
-};
-
-public static class HexagonTriangulation {
-
-    // An array containing the initial points' data of the hexagon (physical locations)
-    private static Tuple<float, float>[] initial_points_data = new Tuple<float, float>[]
-    {
-        new Tuple<float, float>(4.3f, 10.0f),
-        new Tuple<float, float>(8.6f, 7.5f),
-        new Tuple<float, float>(4.3f, 5.0f),
-        new Tuple<float, float>(8.6f, 2.5f),
-        new Tuple<float, float>(4.3f, 0.0f),
-        new Tuple<float, float>(0.0f, 2.5f),
-        new Tuple<float, float>(0.0f, 7.5f)
-    };
-
-    // An array containing the initial edges' data of the hexagon (tuples of point_ids that are connected to each other)
-    private static Tuple<int, int>[] initial_edges_data = new Tuple<int, int>[]
-    {
-        new Tuple<int, int>(0, 1),
-        new Tuple<int, int>(1, 2),
-        new Tuple<int, int>(2, 0),
-        new Tuple<int, int>(2, 3),
-        new Tuple<int, int>(1, 3),
-        new Tuple<int, int>(3, 4),
-        new Tuple<int, int>(4, 2),
-        new Tuple<int, int>(4, 5),
-        new Tuple<int, int>(5, 2),
-        new Tuple<int, int>(5, 6),
-        new Tuple<int, int>(6, 2),
-        new Tuple<int, int>(6, 0),
-    };
-
-    // An array containing the initial triangles of the hexagon
-    private static int[][] initial_triangles_data = new int[][]
-    {
-        new int[] { 0, 1, 2 },
-        new int[] { 1, 3, 2 },
-        new int[] { 2, 3, 4 },
-        new int[] { 2, 4, 5 },
-        new int[] { 2, 5, 6 },
-        new int[] { 2, 6, 0 }
-    };
-
-    // A dictionary that contains all points of the hexagon <point_id, Point>
-    public static Dictionary<int, Point> points_dict = new Dictionary<int, Point>();
-
-    // A dictionary that organizes the points based on their age <age, <point_id>>
-    public static Dictionary<int, List<int>> age_dict = new Dictionary<int, List<int>>();
-
-    // Keeps track of the opposite vertices
-    private static Tuple<List<int>, List<int>>[] opposite_vertices =
-    {
-        new Tuple<List<int>, List<int>>(new List<int>(new int[] { 0, 1 }), new List<int>(new int[] { 5, 4 })),
-        new Tuple<List<int>, List<int>>(new List<int>(new int[] { 1, 3 }), new List<int>(new int[] { 6, 5 })),
-        new Tuple<List<int>, List<int>>(new List<int>(new int[] { 0, 6 }), new List<int>(new int[] { 3, 4 }))
-    };
-    
-
-    // An array that contains all triangles in the hexagon (only the smallest ones, not the ones that are created by others)
-    private static List<int[]> triangles = new List<int[]>();
-
-    // The maximum values for mesh_x and mesh_y of a Point object - helps map to UV values by dividing with that
-    private static float max_x = 8.6f;
-    private static float max_y = 10.0f;
-
-    // How many dividing iteration to have (resolution of the hexagon goes up, the more iterations we have)
-    private static int iterations = 2;
-
-
-    public static void TriangulateHexagon()
-    {
-        // Populate the points_dict with the initial points of the hexagon and the triangles list
-        Setup();
-
-        for (int it = 0; it < iterations; it++)
+        public override bool Equals(object obj)
         {
-            // First step is to visit every current edge on the hexagon and create a point at the middle of each edge
-            Dictionary<int, Point> new_points_dict = CutEdges(it);
-
-            // Create edges between the new points created
-            new_points_dict = ConnectNewPoints(new_points_dict, it);
-
-            // Dump the new_points_dict to the points_dict and update the age_dict
-            List<int> age_points = new List<int>();
-            foreach (KeyValuePair<int, Point> point_entry in new_points_dict)
+            if (!(obj is Point))
             {
-                points_dict[point_entry.Key] = point_entry.Value;
-                age_points.Add(point_entry.Value.point_id);
+                return false;
             }
-            age_dict[it + 1] = age_points;
-        }
-    }
 
-    /*
-     * Takes in the initial_points_data array and creates Point objects populating the points_data dictionary.
-     * Takes in the initial_triangles_data array and populates the triangles list.
-     */
-    private static void Setup()
+            var point = (Point)obj;
+            return EqualityComparer<float[]>.Default.Equals(location, point.location) &&
+                   age == point.age &&
+                   EqualityComparer<List<Point>>.Default.Equals(opp_correspondance, point.opp_correspondance) &&
+                   EqualityComparer<Point[]>.Default.Equals(neighbors, point.neighbors) &&
+                   neighb_hextile_dir == point.neighb_hextile_dir;
+        }
+
+        public override int GetHashCode()
+        {
+            var hashCode = -1146155129;
+            hashCode = hashCode * -1521134295 + base.GetHashCode();
+            hashCode = hashCode * -1521134295 + EqualityComparer<float[]>.Default.GetHashCode(location);
+            hashCode = hashCode * -1521134295 + age.GetHashCode();
+            hashCode = hashCode * -1521134295 + EqualityComparer<List<Point>>.Default.GetHashCode(opp_correspondance);
+            hashCode = hashCode * -1521134295 + EqualityComparer<Point[]>.Default.GetHashCode(neighbors);
+            hashCode = hashCode * -1521134295 + EqualityComparer<string>.Default.GetHashCode(neighb_hextile_dir);
+            return hashCode;
+        }
+
+        public static bool operator ==(Point point1, Point point2)
+        {
+            if (point1.location.SequenceEqual(point2.location))
+                return true;
+            return false;
+        }
+
+        public static bool operator !=(Point point1, Point point2)
+        {
+            if (point1.location.SequenceEqual(point2.location))
+                return false;
+            return true;
+        }
+    };
+
+    // An array containing the initial Points' data of the hexagon (physical locations)
+    private float[,] initial_points_data = new float[,]
     {
-        // Initialize a list that contains all ids of point with age 0
-        List<int> age_points = new List<int>();
+        { 4.3f, 5.0f },   // Center Point
+        { 4.3f, 10.0f },  // Top Point
+        { 8.6f, 7.5f },   // Top right Point
+        { 8.6f, 2.5f },   // Bottom right Point
+        { 4.3f, 0.0f },   // Bottom Point
+        { 0.0f, 2.5f },   // Bottom left Point
+        { 0.0f, 7.5f }    // Top left Point
+    };
 
-        // Create the initial Point objects
-        for (int index = 0; index < initial_points_data.Length; index++)
-        {
-            Point point = new Point
-            {
-                point_id = index,
-                mesh_x = initial_points_data[index].Item1,
-                mesh_y = initial_points_data[index].Item2,
-                uv_x = initial_points_data[index].Item1 / max_x,
-                uv_y = initial_points_data[index].Item2 / max_y,
-                neighbor_ids = new Dictionary<int, int>(),
-                age = 0
-            };
-            points_dict[index] = point;
+    // Dictionary that categorizes Points based on their age
+    public Dictionary<int, List<Point>> unique_points_dict = new Dictionary<int,List<Point>>();
 
-            // Update the age_points list
-            age_points.Add(point.point_id);
-        }
+    // The list that contains all Triangles of the hextile
+    public List<Point[]> triangles = new List<Point[]>();
 
-        // Push the age_points list to the age_dict
-        age_dict[0] = age_points;
-
-        // Update the Point objects with their neighbors
-        for (int index = 0; index < initial_edges_data.Length; index++)
-        {
-            int id_1 = initial_edges_data[index].Item1;
-            int id_2 = initial_edges_data[index].Item2;
-            points_dict[id_1].neighbor_ids[id_2] = 0;
-            points_dict[id_2].neighbor_ids[id_1] = 0;
-        }
-        
-        // Populate the triangles list
-        for (int index = 0; index < initial_triangles_data.GetLength(0); index++)
-            triangles.Add(initial_triangles_data[index]);
-        
-    }
-
-    /*
-     * This function visits every edge on the hexagon and creates a point at the middle of it.
-     * Update points_dict for the new neighbors accordingly.
-     * Return all the new points for further computation.
-     */
-    private static Dictionary<int, Point> CutEdges(int it)
+    public void TriangulateHexagon(int iterations)
     {
-        // We dont want the newly created points stored in the points_dict yet, so store them here
-        Dictionary<int, Point> new_points_dict = new Dictionary<int, Point>();
-
-        // Visit all the current points on the hexagon
-        foreach (int point_id in new List<int>(points_dict.Keys))
+        // Step 1: Create the initial Triangles, creating new Points when needed
+        for (int i = 1; i < initial_points_data.GetLength(0); i++)
         {
-            Point point = points_dict[point_id];
-
-            // For each neighbor of this point
-            foreach (int neighbor_id in new List<int>(point.neighbor_ids.Keys))
+            Point[] triangle_points = new Point[3];
+            // Fetch/Create the three Points that will make up the Triangle and add them to an array
+            for (int j = 0; j < 3; j++)
             {
-                // If the edge has not been yet cut (this is true when the age of the neighboring point is equal to the iteration)
-                if (point.neighbor_ids[neighbor_id] == it)
+                int index = 0;
+                switch (j)
                 {
-                    // Create a new Point object and add it to the new_points_dict
-                    Point midpoint = CreateMidpoint(point_id, neighbor_id, points_dict.Count + new_points_dict.Count, it + 1);
-                    new_points_dict[points_dict.Count + new_points_dict.Count] = midpoint;
-
-                    // Update the two old points' neighbors
-                    points_dict[point_id].neighbor_ids.Remove(neighbor_id);
-                    points_dict[point_id].neighbor_ids[midpoint.point_id] = it + 1;
-
-                    points_dict[neighbor_id].neighbor_ids.Remove(point_id);
-                    points_dict[neighbor_id].neighbor_ids[midpoint.point_id] = it + 1;
+                    case 0:
+                        index = 0;
+                        break;
+                    case 1:
+                        index = i;
+                        break;
+                    case 2:
+                        index = (i == initial_points_data.GetLength(0) - 1) ? 1 : i + 1;
+                        break;
                 }
+
+                // If the point that corresponds to the location pointed by the initial_points_data does exists, fetch it from the dictionary
+                // If it doesn't exist, create a new Point and add it to the dictionary
+                Point? point = FetchFromDictionary(0, initial_points_data[index, 0], initial_points_data[index, 1]);
+                if (point == null)
+                {
+                    // Create the new Point and add it to the dictionary
+                    point = new Point()
+                    {
+                        location = new float[3] { initial_points_data[index, 0], -1.0f, initial_points_data[index, 1] },
+                        age = 0,
+                        opp_correspondance = new List<Point>()
+                    };
+                    if (unique_points_dict.ContainsKey(0))
+                        unique_points_dict[0].Add((Point)point);
+                    else
+                        unique_points_dict.Add(0, new List<Point>() { (Point)point } );
+                }
+
+                // Add the Point to the Triangle's array
+                triangle_points[j] = (Point)point;
             }
+
+            // Add the triangle created to the list
+            triangles.Add(triangle_points);
         }
 
-        return new_points_dict;
-    }
-
-    /*
-     * Creates a new Point object at the middle of an edge, with the correct properties
-     */
-    private static Point CreateMidpoint(int id_1, int id_2, int new_point_id, int new_point_age)
-    {
-        // Get the location of the old points
-        float x_1 = points_dict[id_1].mesh_x;
-        float y_1 = points_dict[id_1].mesh_y;
-        float x_2 = points_dict[id_2].mesh_x;
-        float y_2 = points_dict[id_2].mesh_y;
-
-        // Get the age of the old points
-        int age_1 = points_dict[id_1].age;
-        int age_2 = points_dict[id_2].age;
-
-        // Calculate the location of the midpoint
-        float new_x = (x_1 + x_2) / 2;
-        float new_y = (y_1 + y_2) / 2;
-
-        Dictionary<int, int> neighbs = new Dictionary<int, int>();
-        neighbs[id_1] = age_1;
-        neighbs[id_2] = age_2;
-
-        Point point = new Point
+        // Step 2: Instantiate the correspondance array, which is an array of three arrays of two lists of Points
+        // Basically linking the edges (1,2)-(5,4), (2,3)-(6,5) and (3,4)-(1-6)
+        List<Point>[,] correspondance_array =
         {
-            point_id = new_point_id,
-            mesh_x = new_x,
-            mesh_y = new_y,
-            uv_x = new_x / max_x,
-            uv_y = new_y / max_y,
-            neighbor_ids = neighbs,
-            initial_neighbors = new Tuple<int, int>(id_1, id_2),
-            age = new_point_age
+            { new List<Point>() { unique_points_dict[0][1], unique_points_dict[0][2] }, new List<Point>() { unique_points_dict[0][5], unique_points_dict[0][4] } },
+            { new List<Point>() { unique_points_dict[0][2], unique_points_dict[0][3] }, new List<Point>() { unique_points_dict[0][6], unique_points_dict[0][5] } },
+            { new List<Point>() { unique_points_dict[0][3], unique_points_dict[0][4] }, new List<Point>() { unique_points_dict[0][1], unique_points_dict[0][6] } }
         };
 
-        // Update the opposite_vertices array
-        for (int i = 0; i < opposite_vertices.Length; i++)
+        // Step 3: Divide existing triangles into four new ones (repeat for each iteration)
+        for (int it = 0; it < iterations; it++)
         {
-            List<int> edge_1 = opposite_vertices[i].Item1;
-            List<int> edge_2 = opposite_vertices[i].Item2;
+            // Create a new list of triangles that will replace the triangles list at the end of each iteration
+            List<Point[]> new_triangles = new List<Point[]>();
 
-            // Check if the midpoint is on one of the two edges, meaning id_1 and id_2 are adjacent to one of the two lists
-            for (int j = 0; j < edge_1.Count - 1; j++)
-                if ((edge_1.ElementAt(j) == id_1 && edge_1.ElementAt(j + 1) == id_2) || (edge_1.ElementAt(j) == id_2 && edge_1.ElementAt(j + 1) == id_1))
-                    edge_1.Insert(j + 1, new_point_id);
+            // Traverse every triangle and break it down to four new ones
+            foreach (Point[] triangle in triangles)
+            {
+                // Cut the three edges in half and get three new Points
+                Point[] midpoints = CreateMidpoints(triangle, it);
 
-            for (int j = 0; j < edge_2.Count - 1; j++)
-                if ((edge_2.ElementAt(j) == id_1 && edge_2.ElementAt(j + 1) == id_2) || (edge_2.ElementAt(j) == id_2 && edge_2.ElementAt(j + 1) == id_1))
-                    edge_2.Insert(j + 1, new_point_id);
+                // Search the Point dictionary and replace any midpoint that is already stored in the dictionary
+                if (unique_points_dict.ContainsKey(it + 1))
+                for (int i = 0; i < 3; i++)
+                    for (int j = 0; j < unique_points_dict[it + 1].Count; j++)
+                        if (unique_points_dict[it + 1][j] == midpoints[i])
+                            midpoints[i] = unique_points_dict[it + 1][j];
+
+                // If a midpoint is located in one of the outer edges of the hexagon update the correspondance_array
+                for (int i = 0; i < 3; i++)
+                    UpdateCorrespondanceArray(ref midpoints[i], ref correspondance_array);
+
+                // Add the new Points to the Points dictionary
+                for (int i = 0; i < 3; i++)
+                    if (unique_points_dict.ContainsKey(it + 1))
+                    {
+                        bool is_stored = false;
+                        foreach (Point point in unique_points_dict[it + 1])
+                            if (point == midpoints[i])
+                                is_stored = true;
+                        if (!is_stored)
+                            unique_points_dict[it + 1].Add(midpoints[i]);
+                    }
+                    else
+                        unique_points_dict.Add(it + 1, new List<Point>() { midpoints[i] });
+
+                // Create four new Triangles with the three new Points and the three old Points
+                for (int i = 0; i < 3; i++)
+                {
+                    // Get sets of two midpoints
+                    Point midpoint1 = midpoints[i];
+                    Point midpoint2 = midpoints[(i + 1) % 3];
+
+                    // Get the Point that those two midpoints both connect to
+                    for (int j = 0; j < 3; j++)
+                        if 
+                        (
+                            (midpoint1.neighbors[0] == triangle[j] || midpoint1.neighbors[1] == triangle[j])
+                            &&
+                            (midpoint2.neighbors[0] == triangle[j] || midpoint2.neighbors[1] == triangle[j])
+                        )
+                        {
+                            Point[] new_triangle = new Point[3] { triangle[j], midpoint1, midpoint2 };
+                            System.Array.Reverse(new_triangle);
+                            new_triangles.Add(new_triangle);
+                            break;
+                        }
+                }
+                new_triangles.Add(midpoints);
+            }
+
+            // Replace the old triangles list with the new one
+            triangles = new List<Point[]>(new_triangles);
         }
 
-        return point;
+        // Step 4: Update each Point's correspondance value
+        for (int i = 0; i < 3; i++)
+        {
+            // For every set of two edges, traverse the Points at the same time and connect those two Points
+            for (int j = 0; j < correspondance_array[i, 0].Count; j++)
+            {
+                correspondance_array[i, 0][j].opp_correspondance.Add(correspondance_array[i, 1][j]);
+                correspondance_array[i, 1][j].opp_correspondance.Add(correspondance_array[i, 0][j]);
+            }
+        }
     }
 
-    /*
-     * Connects the new points created with edges. A perfect hexagon can be created by 6 equilateral triangles.
-     * With every iteration these triangles are split into 4 new ones. We call the old triangle of an iteration
-     * the "outer triangle" and the middle of the four new ones the "inner triangle". The inner triangle is created
-     * by three of the new points created, while the other three small triangles are created by two of the same three
-     * points created along with one old point.
-     * We search combinations of three points. For each combination, if their neighbors are the same three old points,
-     * that means that this combination of three new points are inside the outer triangle.
-     */
-    private static Dictionary<int, Point> ConnectNewPoints(Dictionary<int, Point> new_points_dict, int it)
+    private Point? FetchFromDictionary(int age, float loc_x, float loc_z)
     {
-        // Keeps track of the unique  neighbors of a combination of three new points
-        Dictionary<int, int> unique_neighbors_count = new Dictionary<int, int>();
+        if (!unique_points_dict.ContainsKey(age))
+            return null;
+        foreach (Point point in unique_points_dict[age])
+            if (point.location[0] == loc_x && point.location[2] == loc_z)
+                return point;
+        return null;
+    }
 
-        // Get a snapshot of the new_points_dict because we are gonna work on that live
-        List<Point> initial_new_points = new List<Point>(new_points_dict.Values);
+    private Point[] CreateMidpoints(Point[] triangle, int iteration)
+    {
+        Point[] midpoints = new Point[3];
 
-        // For every combination of three new points, check if they are inside an outer triangle, and if yes, connect them
-        for (int i = 0; i < initial_new_points.Count - 2; i++)
+        for (int i = 0; i < 3; i++)
         {
-            // Get the Point data
-            int id_1 = initial_new_points.ElementAt(i).point_id;
-            Point point_1 = initial_new_points.ElementAt(i);
+            int index1 = i;
+            int index2 = (i + 1) % 3;
 
-            // Update the neighbors_count
-            unique_neighbors_count = AddUniqueNeighbors(new Dictionary<int, int>(), point_1, it);
-
-            // Back up the neighbors_count
-            Dictionary<int, int> backup_dict_1 = new Dictionary<int, int>(unique_neighbors_count);
-
-            for (int j = i + 1; j < initial_new_points.Count - 1; j++)
+            Point point = new Point()
             {
-                // Get the Point data
-                int id_2 = initial_new_points.ElementAt(j).point_id;
-                Point point_2 = initial_new_points.ElementAt(j);
+                location = new float[3] { (triangle[index1].location[0] + triangle[index2].location[0]) / 2, -1.0f, (triangle[index1].location[2] + triangle[index2].location[2]) / 2 },
+                age = iteration + 1,
+                opp_correspondance = new List<Point>(),
+                neighbors = new Point[2] { triangle[index1], triangle[index2] }
+            };
 
-                // Make sure to restore the dictionary every time we start a new J iteration
-                unique_neighbors_count = new Dictionary<int, int>(backup_dict_1);
+            midpoints[i] = point;
+        }
 
-                // Update the neighbors_count
-                unique_neighbors_count = AddUniqueNeighbors(unique_neighbors_count, point_2, it);
+        return midpoints;
+    }
 
-                // Back up the neightbors_count
-                Dictionary<int, int> backup_dict_2 = new Dictionary<int, int>(unique_neighbors_count);
-
-                // Count the unique neighbors that appear 2 times as neighbors to the points 1 and 2 in question
-                if (CountValidNeighbors(unique_neighbors_count) == 1)
+    private void UpdateCorrespondanceArray(ref Point point, ref List<Point>[,] correspondance_array)
+    {
+        string[] opposite_edge_tags = new string[6] { "top_right", "bottom_left", "right", "left", "bottom_right", "top_left" };
+        // Traverse the three entries of the correspondance array -- these entries store two lists of Points
+        for (int i = 0; i < 3; i++)
+        {
+            // Traverse each list of Points
+            for (int j = 0; j < 2; j++)
+            {
+                // Traverse each Point on the list
+                for (int k = 0; k < correspondance_array[i, j].Count - 1; k++)
                 {
-                    for (int k = j + 1; k < initial_new_points.Count; k++)
+                    Point left_point = correspondance_array[i, j][k];
+                    Point right_point = correspondance_array[i, j][k + 1];
+                    if (point.neighbors[0] == left_point && point.neighbors[1] == right_point || point.neighbors[1] == left_point && point.neighbors[0] == right_point)
                     {
-                        // Get the Point data
-                        int id_3 = initial_new_points.ElementAt(k).point_id;
-                        Point point_3 = initial_new_points.ElementAt(k);
-
-                        // Restore the dictionary
-                        unique_neighbors_count = new Dictionary<int, int>(backup_dict_2);
-
-                        // Update the neighbors_count
-                        unique_neighbors_count = AddUniqueNeighbors(unique_neighbors_count, point_3, it);
-
-                        // Check inner triangle conditions
-                        if (CountValidNeighbors(unique_neighbors_count) == 3)
-                        {
-                            // Update the connections
-                            new_points_dict[id_1].neighbor_ids[id_2] = it + 1;
-                            new_points_dict[id_1].neighbor_ids[id_3] = it + 1;
-                            new_points_dict[id_2].neighbor_ids[id_1] = it + 1;
-                            new_points_dict[id_2].neighbor_ids[id_3] = it + 1;
-                            new_points_dict[id_3].neighbor_ids[id_1] = it + 1;
-                            new_points_dict[id_3].neighbor_ids[id_2] = it + 1;
-
-                            // Update the triangles array
-                            // Get the three points that form the outer triangle
-                            int[] outer_triangle_points = new int[] { -1, -1, -1 };
-                            int index = 0;
-                            foreach (KeyValuePair<int, int> neighbor_entry in unique_neighbors_count)
-                            {
-                                if (neighbor_entry.Value == 2)
-                                {
-                                    outer_triangle_points[index] = neighbor_entry.Key;
-                                    index++;
-                                }
-                            }
-                            UpdateTriangles(new_points_dict, id_1, id_2, id_3, outer_triangle_points);
-                        }
+                        // Tag the Point's edge
+                        point.neighb_hextile_dir = opposite_edge_tags[i * 2 + j];
+                        // Add the Point to the correspondance array
+                        correspondance_array[i, j].Insert(k + 1, point);
                     }
                 }
-
             }
         }
-
-        return new_points_dict;
-    }
-
-    /*
-     * Takes an existing dictionary of unique_neighbors_count and updates it with the neighbors of the Point argument given.
-     */
-    private static Dictionary<int, int> AddUniqueNeighbors(Dictionary<int, int> existing_dict, Point point, int it)
-    {
-        // Go through all neighbors of the Point object
-        foreach (KeyValuePair<int, int> neighbor_entry in point.neighbor_ids)
-        {
-            // Neighbors should be older age so make sure that the key is in the points_dict
-            if (points_dict.ContainsKey(neighbor_entry.Key))
-            {
-                if (points_dict[neighbor_entry.Key].age <= it)
-                {
-                    if (existing_dict.ContainsKey(neighbor_entry.Key))
-                        existing_dict[neighbor_entry.Key] += 1;
-                    else
-                        existing_dict[neighbor_entry.Key] = 1;
-                }
-            }
-        }
-
-        return existing_dict;
-    }
-
-    /*
-     * Given the unique_neighbors_count dictionary as an argument, returns how many neighbors appear 2 times.
-     */
-    private static int CountValidNeighbors(Dictionary<int, int> unique_neighbors_count)
-    {
-        int count = 0;
-        foreach (KeyValuePair<int, int> neighbor_entry in unique_neighbors_count)
-            if (neighbor_entry.Value == 2)
-                count++;
-        return count;
-    }
-
-    /*
-     * stuff
-     */
-    private static void UpdateTriangles(Dictionary<int, Point> new_points_dict, int id_1, int id_2, int id_3, int[] outer_points)
-    {
-        // Find and remove the outer triangle from the triangles list
-        foreach (int[] triangle in triangles)
-        {
-            // All the points from the outer_points array are located in the triangle array
-            bool all_here = true;
-
-            // For every point in the outer_points array
-            for (int i = 0; i < 3; i++)
-            {
-                // Initially it doesnt exist in the triangles array
-                bool exists = false;
-
-                // Check all 3 items in the triangles array
-                for (int j = 0; j < 3; j++)
-                    if (outer_points[i] == triangle[j])
-                        exists = true;
-
-                // If this point doesnt exist, not all points are the same
-                if (!exists)
-                    all_here = false;
-            }
-
-            if (!all_here)
-            {
-                triangles.Remove(triangle);
-                break;
-            }
-        }
-
-        // Create the three (not the center one) new triangles and add them to the list
-        Point[] inner_points = new Point[] { new_points_dict[id_1], new_points_dict[id_2], new_points_dict[id_3] };
-
-        // Create the center triangle and add it to the list
-        Point[] new_triangle_points = new Point[] { new_points_dict[id_1], new_points_dict[id_2], new_points_dict[id_3] };
-        new_triangle_points = ClockwiseSort(new_triangle_points);
-        triangles.Add(new int[] { new_triangle_points[0].point_id, new_triangle_points[1].point_id, new_triangle_points[2].point_id });
-
-        foreach (int outer_point in outer_points)
-        {
-            // Get the three points that will make up the triangle
-            new_triangle_points = new Point[] { points_dict[outer_point], new Point(), new Point() };
-            int index = 1;
-            foreach (Point inner_point in inner_points)
-            {
-                bool found = false;
-                foreach (KeyValuePair<int, int> neighbor_entry in inner_point.neighbor_ids)
-                    if (neighbor_entry.Key == outer_point)
-                        found = true;
-                if (found)
-                {
-                    new_triangle_points[index] = inner_point;
-                    index++;
-                }
-            }
-
-            // Sort the points to be in a clockwise order (used for the triangle meshes)
-            new_triangle_points = ClockwiseSort(new_triangle_points);
-            triangles.Add(new int[] { new_triangle_points[0].point_id, new_triangle_points[1].point_id, new_triangle_points[2].point_id });
-        }
-    }
-
-    /*
-     * stuff
-     */
-    private static Point[] ClockwiseSort(Point[] point_list)
-    {
-        // First goes the point with the highest Y value
-        int highest_y = 0;
-        for (int i = 0; i < point_list.Length; i++)
-            if (point_list[i].mesh_y > point_list[highest_y].mesh_y)
-                highest_y = i;
-
-        // Then goes the point with the highest X value
-        int highest_x = -1;
-        for (int i = 0; i < point_list.Length; i++)
-            if (i != highest_y && (highest_x == -1 || point_list[i].mesh_x > point_list[highest_x].mesh_x))
-                highest_x = i;
-
-        // Then the last one
-        int last_one = -1;
-        for (int i = 0; i < 3; i++)
-            if (i != highest_y && i != highest_x)
-                last_one = i;
-
-        point_list = new Point[] { point_list[highest_y], point_list[highest_x], point_list[last_one] };
-        return point_list;
-    }
-
-    public static Vector3[] GetVerticesArray()
-    {
-        Vector3[] local_vertices = new Vector3[points_dict.Count];
-        for (int i = 0; i < local_vertices.Length; i++)
-            local_vertices[i] = new Vector3(points_dict[i].mesh_x, -1.0f, points_dict[i].mesh_y);
-        return local_vertices;
-    }
-
-    public static int[] GetTrianglesArray()
-    {
-        int[] local_triangles = new int[triangles.Count * 3];
-        int index = 0;
-        foreach (int[] triangle in triangles)
-        {
-            local_triangles[index] = triangle[0];
-            local_triangles[index + 1] = triangle[1];
-            local_triangles[index + 2] = triangle[2];
-            index += 3;
-        }
-        return local_triangles;
-    }
-
-    public static Vector2[] GetUVArray()
-    {
-        Vector2[] local_uvs = new Vector2[points_dict.Count];
-        for (int i = 0; i < local_uvs.Length; i++)
-            local_uvs[i] = new Vector2(points_dict[i].uv_x, points_dict[i].uv_y);
-        return local_uvs;
-    }
-
-    public static int GetOppositePoint(int point_id)
-    {
-        for (int i = 0; i < opposite_vertices.Length; i++)
-        {
-            List<int> edge_1 = opposite_vertices[i].Item1;
-            List<int> edge_2 = opposite_vertices[i].Item2;
-
-            for (int j = 0; j < edge_1.Count; j++)
-            {
-                if (edge_1[j] == point_id)
-                    return edge_2[j];
-                else if (edge_2[j] == point_id)
-                    return edge_1[j];
-            }
-        }
-        return -1;
-    }
-
-    public static string GetEdgeCode(int point_id)
-    {
-        List<int> right_up_list = opposite_vertices[0].Item1;
-        List<int> right_list = opposite_vertices[1].Item1;
-        List<int> right_down_list = opposite_vertices[2].Item2;
-        List<int> left_down_list = opposite_vertices[0].Item2;
-        List<int> left_list = opposite_vertices[1].Item2;
-        List<int> left_up_list = opposite_vertices[2].Item1;
-
-        for (int i = 0; i < right_up_list.Count; i++)
-        {
-            if (right_up_list[i] == point_id)
-                return "right_up";
-            else if (right_list[i] == point_id)
-                return "right";
-            else if (right_down_list[i] == point_id)
-                return "right_down";
-            else if (left_down_list[i] == point_id)
-                return "left_down";
-            else if (left_list[i] == point_id)
-                return "left";
-            else if (left_up_list[i] == point_id)
-                return "left_up";
-        }
-        return "";
     }
 }

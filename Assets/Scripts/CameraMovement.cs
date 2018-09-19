@@ -6,7 +6,7 @@ public class CameraMovement : MonoBehaviour {
 
     // Zoom
     private float min_zoom = 50;
-    private float max_zoom = 1000;
+    private float max_zoom = 1700;
     private float zoom_speed = 1000;
 
     // Scroll speed
@@ -19,9 +19,7 @@ public class CameraMovement : MonoBehaviour {
 
     
     void Start () {
-
         // Setup the camera
-        transform.position = new Vector3(450, 700, 250);
         transform.eulerAngles = new Vector3(90, 0, 0);
 
         cursor_x = Input.mousePosition.x;
@@ -52,5 +50,10 @@ public class CameraMovement : MonoBehaviour {
         // Update cursor position
         cursor_x = Input.mousePosition.x;
         cursor_y = Input.mousePosition.y;
+    }
+
+    public void PlaceCameraAt(Vector3 vector3)
+    {
+        transform.position = vector3;
     }
 }
