@@ -17,10 +17,10 @@ FEATURES
 - Resources options (not functioning yet).
 - Distribution options (not functioning yet).
 
-GENERATION QoL FEATURES
+FEATURES
 - Ability to generate the map straight away, or view the steps one by one.
 - Plate/Geographical/Height map layers.
-- Direction vectors for every hextile that show the movement of the hextile for the next step.
+- Basic 3D world morphology.
 
 TODO
 - A slightly more complex interaction between plates/hextiles.
